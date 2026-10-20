@@ -1,0 +1,24 @@
+/* Overall dropdown */
+#type-selector {
+    background-color: #080c16 !important;
+    border: 1px solid #34445c !important;
+    border-radius: 5px !important;
+    color: #e8edf5 !important;
+}
+
+/* Clickable dropdown area */
+#type-selector .dash-dropdown-trigger {
+    background-color: #080c16 !important;
+    color: #e8edf5 !important;
+}
+
+/* Selected value */
+#type-selector .dash-dropdown-value {
+    color: #e8edf5 !important;
+}
+
+/* Dropdown arrow */
+#type-selector .dash-dropdown-trigger-icon {
+    color: #8fa1b8 !important;
+    stroke: #8fa1b8 !important;
+}

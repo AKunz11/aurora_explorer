@@ -1,0 +1,120 @@
+# Mars Aurora Explorer
+
+An interactive [Dash](https://dash.plotly.com/) application for exploring
+MAVEN Imaging Ultraviolet Spectrograph (IUVS) auroral detections. The app
+combines survey-level plots (maps, coverage, geometry, and coadded spectra)
+with a viewer for individual detector images and multiple-linear-regression
+(MLR) spectral components.
+
+## What the application shows
+
+- **Aurora Explorer:** filter detections by orbit, fit quality, pixel count,
+  solar zenith angle, and detection type, then compare their spatial and
+  temporal distributions.
+- **MLR Spectrum Viewer:** inspect a single orbit/scan/integration, choose the
+  fitted spectral components to display, and view the matching detector image.
+- **Mars geometry:** transform planet-fixed coordinates into Mars Solar
+  Orbital (MSO) coordinates using bundled SPICE kernels.
+
+This repository contains the visualization application and analysis helpers.
+It does **not** contain the mission L1B/L1C products, detection catalog, or
+generated per-orbit spectra; those datasets must be supplied separately.
+
+## Quick start
+
+The project is currently configured for Python 3.12 on Windows. From the
+repository root:
+
+```powershell
+py -3.12 -m venv .venv
+.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
+python app.py
+```
+
+Dash prints the local URL to the terminal (normally
+`http://127.0.0.1:8050`). Open it in a browser. The first load performs data
+and coordinate preparation, so startup time depends on the catalog size.
+
+## Required data and configuration
+
+Several paths are currently constants rather than command-line options. Update
+them for your local data layout before starting the app:
+
+| Purpose | Location in code | Current value / expected layout |
+| --- | --- | --- |
+| Detection catalog | `app.py` (`master_path`) | `E:/nightglow/master_cnn.csv` |
+| L1B products | `Spectrum/misc_helpers.py` | `E:/nightglow/b/#####/*.fits.gz` |
+| L1C products | `Spectrum/misc_helpers.py` | `E:/nightglow/c/#####/*.fits.gz` |
+| Coadded-spectrum inputs | `Explorer/coadded_plotly.py` | `E:/nightglow/spectra_out/#####/orbit#####_spectra.npz` |
+| Magnetic topology map | `app.py` | `assets/bfield_smoothed.npy` |
+| SPICE kernels | `Explorer/mso_coords.py` | `assets/spice/{LSK,PCK,SPK}/...` |
+
+`#####` is the zero-padded orbit block rounded down to the nearest hundred.
+For example, orbit 8675 is read from directory `08600`.
+
+At minimum, the detection CSV is expected to provide the columns used by the
+filters and plots: `nick_number`, `orbit_number`, `scan`, `color_flag_muv`,
+`type`, `pearson_r_muv`, `count`, `sza`, `CO/CO2p`, `latitude`, `longitude`,
+`altitude`, `et`, `local_time`, `solar_longitude`, and `date`. Dates use the
+`YYYY-Mon-DD` form (for example, `2024-Jan-15`), and `et` is SPICE ephemeris
+time in seconds.
+
+## Coordinate conventions
+
+- Geographic latitude/longitude are fixed to the surface of Mars.
+- MSO `+X` points from Mars toward the Sun.
+- MSO longitude `0°` is the subsolar direction, `±90°` is the terminator, and
+  `180°` is antisolar (midnight).
+- MSO latitude is measured north/south of the Mars orbital plane.
+- The nightside projection uses
+  `x = -cos(MSO latitude) sin(MSO longitude)` and
+  `y = sin(MSO latitude)`, placing the antisolar point at its center.
+
+## Repository guide
+
+```text
+app.py                  Main Dash application and callbacks
+Explorer/               Survey-level Plotly figures and MSO conversion
+Spectrum/               FITS access, detector images, and MLR reconstruction
+Spectrum/PyUVS/         Calibration/geometry routines and template data
+assets/                 CSS, logo, topology map, and SPICE kernels
+plot_detector.py        Standalone Matplotlib detector overview
+mlr_app.py              Legacy standalone spectrum-viewer prototype
+plot_webpage.py          Legacy explorer prototype
+```
+
+`app.py` is the maintained combined entry point. The two prototype files are
+retained as references and are excluded by `.gitignore`.
+
+## How data flows
+
+1. `app.py` loads and filters the detection catalog at import time.
+2. `Explorer.mso_coords` adds MSO longitude and latitude to each row.
+3. The explorer callback applies the UI filters and passes the resulting frame
+   to the plotting helpers in `Explorer/`.
+4. The spectrum callback uses `Spectrum.mlr_fit.build_spectrum` for the MLR
+   reconstruction and `Spectrum.detector.build_detector_image` for the L1B
+   detector heatmap.
+
+UI scan and integration numbers are **one-based**. Helpers convert them to
+zero-based array indices before reading FITS data.
+
+## Development notes
+
+- Run `python -m compileall app.py Explorer Spectrum plot_detector.py` for a
+  quick syntax check that does not require the external science data.
+- Keep reusable scientific calculations in `Spectrum/` and visual-only logic
+  in `Explorer/`; callbacks should mostly validate inputs and coordinate them.
+- Plot helpers assume the filtered dataset is non-empty. If adding filters,
+  handle the empty-data case before calculations such as `min()`/`max()`.
+- Do not commit virtual environments or large mission data products. The
+  existing `.gitignore` excludes the known local environments.
+
+## Standalone detector overview
+
+`plot_detector.py` creates a Matplotlib quick-look grid for all MUV (or FUV)
+scans in an orbit and can overlay integrations marked as cosmic rays. Its
+`BASE_L1B` constant must point to the local L1B tree. Execute it directly after
+editing the example orbit near the end of the file, or import `plot_detector`
+from another analysis script.
