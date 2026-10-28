@@ -1,1 +1,4 @@
-I think ive done all
+Add altitude profiles:
+    -cam and uvd brightness
+    -abundances? (ngims?)
+
