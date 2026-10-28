@@ -1,4 +1,5 @@
 Add altitude profiles:
-    -cam and uvd brightness
+    -cam and uvd brightness (done)
     -abundances? (ngims?)
 
+If abundances added, combine the brightness into one plot, abundances in the other

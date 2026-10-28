@@ -13,6 +13,7 @@ import plotly.graph_objects as go
 from Spectrum.misc_helpers import *
 from Spectrum.detector import *
 from Spectrum.mlr_fit import *
+from Spectrum.alt_profiles import get_alt_profiles
 
 from Explorer.map_plotly import plot_map
 from Explorer.sphere_map import plot_sphere
@@ -277,6 +278,54 @@ mlr_layout = html.Div(
             config={
                 "displaylogo": False,
                 "scrollZoom": True,
+            },
+        ),
+
+        #Two altitude profiles
+        html.Div(
+            [
+                # Cameron bands
+                html.Div(
+                    dcc.Graph(
+                        id="cam-alt-graph",
+                        config={
+                            "displaylogo": False,
+                            "scrollZoom": True,
+                            "responsive": True,
+                        },
+                        style={"height": "100%", "width": "100%"},
+                    ),
+                    id="cam_alt",
+                    style={
+                        "height": "60vh",
+                        "width": "50%",
+                        "minHeight": "350px",
+                    },
+                ),
+
+                # UVD
+                html.Div(
+                    dcc.Graph(
+                        id="uvd-alt-graph",
+                        config={
+                            "displaylogo": False,
+                            "scrollZoom": True,
+                            "responsive": True,
+                        },
+                        style={"height": "100%", "width": "100%"},
+                    ),
+                    id="uvd_alt",
+                    style={
+                        "height": "60vh",
+                        "width": "50%",
+                        "minHeight": "350px",
+                    },
+                ),
+            ],
+            style={
+                "display": "flex",
+                "width": "100%",
+                "gap": "18px",
             },
         ),
 
@@ -953,6 +1002,8 @@ def update_figs(n_clicks, orb_start, orb_end, pearson, n_pix, sza_min, detection
     Output("detector_image", "figure"),
     Output("spectrum-information", "children"),
     Output("error-message", "children"),
+    Output("cam-alt-graph", "figure"),
+    Output("uvd-alt-graph", "figure"),
     #Inputs: what initializes a callback (e.g. clicking the load button)
     Input("load-button", "n_clicks"),
     Input("component-checklist", "value"),
@@ -986,6 +1037,8 @@ def update_spectrum(
             empty_figure_d,
             "",
             "Enter an orbit, scan, and integration.",
+            go.Figure(),
+            go.Figure(),
         )
     #Get spectrum data and build figure based on inputs
     try:
@@ -1005,6 +1058,8 @@ def update_spectrum(
             integration,
         )
 
+        cam, uvd, alt, rand_unc = get_alt_profiles(orbit_num, scan)
+
     #If error, set figure to empty and print error
     except Exception as error:
         return (
@@ -1012,11 +1067,15 @@ def update_spectrum(
             empty_figure_d,
             "",
             f"Could not load spectrum: {error}",
+            go.Figure(),
+            go.Figure(),
         )
 
     #The initial figure that is loaded with the app (starts empty)
     fig = go.Figure()
     fig_detector = go.Figure()
+    fig_alt_cam = go.Figure()
+    fig_alt_uvd = go.Figure()
 
     wavelength = spectrum_data["wavelength"]
 
@@ -1054,6 +1113,97 @@ def update_spectrum(
             hovertemplate="Wavelength: %{x:.2f} nm<br>DN: %{z:.3f}<extra></extra>",
         )
     )
+
+    #Build alt profiles
+    fig_alt_cam.add_trace(
+        go.Scatter(
+            x=cam,
+            y=alt,
+            mode="lines+markers",
+            name="CO Cameron",
+            hovertemplate=(
+                "Brightness: %{x:.2f} kR"
+                "<br>Altitude: %{y:.3f} km"
+                "<extra>%{fullData.name}</extra>"
+            ),
+        )
+    )
+
+    fig_alt_uvd.add_trace(
+        go.Scatter(
+            x=uvd,
+            y=alt,
+            mode="lines+markers",
+            name="CO2+ UVD",
+            hovertemplate=(
+                "Brightness: %{x:.2f} kR"
+                "<br>Altitude: %{y:.3f} km"
+                "<extra>%{fullData.name}</extra>"
+            ),
+
+        )
+    )
+
+    # Use the Cameron profile's brightness range for both altitude plots.
+    finite_cam = np.asarray(cam)[np.isfinite(cam)]
+    altitude_xaxis = {
+        "title": "Brightness (kR)",
+        "gridcolor": "#263348",
+        "zerolinecolor": "#34445c",
+        "linecolor": "#34445c",
+        "tickcolor": "#34445c",
+    }
+    if finite_cam.size:
+        cam_min = float(np.min(finite_cam))
+        cam_max = float(np.max(finite_cam))
+        cam_span = cam_max - cam_min
+        x_padding = (
+            0.05 * cam_span
+            if cam_span > 0
+            else max(abs(cam_max) * 0.05, 0.05)
+        )
+        altitude_xaxis["range"] = [cam_min - x_padding, cam_max + x_padding]
+
+    # Match the altitude-profile styling to the MLR spectrum plot.
+    for altitude_figure, title in (
+        (fig_alt_cam, "CO Cameron Altitude Profile"),
+        (fig_alt_uvd, "CO2+ UVD Altitude Profile"),
+    ):
+        altitude_figure.update_layout(
+            title=title,
+            xaxis=altitude_xaxis,
+            yaxis={
+                "title": "Altitude (km)",
+                "gridcolor": "#263348",
+                "zerolinecolor": "#34445c",
+                "linecolor": "#34445c",
+                "tickcolor": "#34445c",
+            },
+            hovermode="closest",
+            paper_bgcolor="#080c16",
+            plot_bgcolor="#101827",
+            font={
+                "color": "#c7d2e0",
+                "family": "Arial, sans-serif",
+            },
+            height=500,
+            showlegend=False,
+            margin={
+                "l": 70,
+                "r": 30,
+                "t": 60,
+                "b": 70,
+            },
+            uirevision=f"{orbit_num}-{scan}",
+        )
+        altitude_figure.add_hline(
+            y=135,
+            line_width=1.5,
+            line_dash="dash",
+            line_color="#aeb8c6",
+        )
+
+
 
     peaks = [193, 199.5, 206, 216, 228, 240, 289]
     for peak in peaks:
@@ -1151,7 +1301,7 @@ def update_spectrum(
         f"Pearson R: {r:.2f}"
     )
 
-    return fig, fig_detector, information, ""
+    return fig, fig_detector, information, "", fig_alt_cam, fig_alt_uvd
 
 if __name__ == "__main__":
     app.run(debug=True)
